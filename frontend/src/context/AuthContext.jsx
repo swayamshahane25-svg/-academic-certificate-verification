@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const AuthContext = createContext(null);
-const API_BASE = "http://localhost:5050";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
 
 async function getJson(url, options = {}) {
   const response = await fetch(`${API_BASE}${url}`, {

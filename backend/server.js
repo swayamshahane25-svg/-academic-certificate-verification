@@ -166,9 +166,20 @@ app.post("/api/certificate/issue", authenticateUser, requireRole("ADMIN", "ISSUE
 
     console.log("Transaction sent:", transaction.hash);
 
-    await transaction.wait();
+    const txReceipt = await transaction.wait();
 
     console.log("Certificate issued successfully.");
+
+    // Save to database
+    const { createCertificateRecord } = require("./db");
+    await createCertificateRecord({
+      certificateId,
+      userId: null,
+      issuerId: req.user.sub,
+      university,
+      certificateHash,
+      status: "active"
+    });
 
     res.json({
       success: true,
@@ -182,6 +193,7 @@ app.post("/api/certificate/issue", authenticateUser, requireRole("ADMIN", "ISSUE
       issuer,
       certificateHash,
       transactionHash: transaction.hash,
+      blockNumber: txReceipt?.blockNumber,
     });
   } catch (error) {
     console.error("Issuance error:", error);
@@ -416,6 +428,29 @@ app.post("/api/fraud/analyze", upload.single("pdf"), async (req, res) => {
       reasons: result.reasons,
     });
 
+    // Save fraud report to database
+    const { createFraudReport } = require("./db");
+    const reportFindings = {
+      ...result.fieldComparison,
+      blockchainFound: !!blockchainData,
+      hashMatch,
+      certificateIdExtracted: !!certificateId,
+      aiAnalysis: aiAnalysis?.enabled ? {
+        provider: aiAnalysis.provider,
+        model: aiAnalysis.model,
+        confidence: aiAnalysis.confidence
+      } : null
+    };
+
+    await createFraudReport({
+      userId: req.user ? req.user.sub : null,
+      certificateId: certificateId || null,
+      riskLevel: result.riskLevel,
+      riskScore: result.riskScore,
+      summary: result.reasons ? result.reasons.join("; ") : "Fraud analysis completed",
+      findings: reportFindings
+    });
+
     res.json({
       ...result,
       fileName: req.file.originalname,
@@ -433,6 +468,73 @@ app.post("/api/fraud/analyze", upload.single("pdf"), async (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+
+// Student certificates endpoint
+app.get("/api/student/certificates", authenticateUser, requireRole("STUDENT", "ADMIN", "ISSUER"), async (req, res) => {
+  try {
+    const { getCertificateRecordsByUserId, listCertificateRecords } = require("./db");
+    
+    let certificates = [];
+    if (req.user.role === "STUDENT") {
+      certificates = await getCertificateRecordsByUserId(req.user.sub);
+    } else {
+      certificates = await listCertificateRecords();
+    }
+
+    // Fetch full details from blockchain for each certificate
+    const certificateDetails = [];
+    for (const cert of certificates) {
+      try {
+        const blockchainData = await certificateRegistry.getCertificate(cert.certificateId);
+        if (blockchainData && blockchainData[0]) {
+          certificateDetails.push({
+            ...cert,
+            studentName: blockchainData[1],
+            degree: blockchainData[2],
+            department: blockchainData[3],
+            university: blockchainData[4],
+            issuer: blockchainData[6],
+            issueDate: blockchainData[7].toString(),
+            revoked: blockchainData[8],
+          });
+        }
+      } catch (err) {
+        console.warn("Could not fetch blockchain data for certificate:", cert.certificateId, err.message);
+        certificateDetails.push(cert);
+      }
+    }
+
+    res.json({ certificates: certificateDetails });
+  } catch (error) {
+    console.error("Student certificates error:", error);
+    res.status(500).json({ error: "Unable to load certificates." });
+  }
+});
+
+// Fraud history endpoint
+app.get("/api/fraud/history", authenticateUser, async (req, res) => {
+  try {
+    const { listFraudReports } = require("./db");
+    
+    let reports = await listFraudReports();
+    
+    // Filter by user if student
+    if (req.user.role === "STUDENT") {
+      reports = reports.filter(r => r.userId === req.user.sub);
+    }
+
+    // Parse findings JSON
+    reports = reports.map(r => ({
+      ...r,
+      findings: r.findings ? JSON.parse(r.findings) : {}
+    }));
+
+    res.json({ reports });
+  } catch (error) {
+    console.error("Fraud history error:", error);
+    res.status(500).json({ error: "Unable to load fraud history." });
+  }
+});
 
 app.get("/api/admin/users", authenticateUser, requireRole("ADMIN"), async (req, res) => {
   try {
