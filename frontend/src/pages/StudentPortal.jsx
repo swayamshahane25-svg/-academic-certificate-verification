@@ -29,13 +29,7 @@ function StudentPortal() {
     return `${window.location.origin}/student?id=${encodeURIComponent(certificateId)}`;
   }, [certificateId]);
 
-  useEffect(() => {
-    if (qrCertificateId) {
-      verifyCertificate(qrCertificateId);
-    }
-  }, [qrCertificateId]);
-
-  const verifyCertificate = async (idToVerify = certificateId) => {
+  const verifyCertificate = async (idToVerify) => {
     const trimmedId = (idToVerify || "").trim();
 
     if (!trimmedId) {
@@ -103,6 +97,16 @@ function StudentPortal() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (qrCertificateId) {
+      const timeoutId = window.setTimeout(() => {
+        void verifyCertificate(qrCertificateId);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [qrCertificateId]);
 
   const handleCopyLink = async () => {
     if (!certificateId) {
@@ -291,7 +295,7 @@ function StudentPortal() {
                 onChange={(event) => setCertificateId(event.target.value)}
                 placeholder="Enter Certificate ID"
               />
-              <button type="button" className="primary-btn" onClick={() => verifyCertificate()} disabled={loading}>
+              <button type="button" className="primary-btn" onClick={() => verifyCertificate(certificateId)} disabled={loading}>
                 {loading ? "Verifying..." : "Verify Certificate"}
               </button>
             </div>

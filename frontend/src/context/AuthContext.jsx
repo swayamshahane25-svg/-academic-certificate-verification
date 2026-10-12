@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
       const data = await getJson("/api/auth/me");
       setUser(data.user || null);
       return data.user || null;
-    } catch (error) {
+    } catch {
       setUser(null);
       return null;
     } finally {
@@ -40,7 +40,18 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    refreshUser();
+    const initializeAuth = async () => {
+      try {
+        const data = await getJson("/api/auth/me");
+        setUser(data.user || null);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void initializeAuth();
   }, []);
 
   const login = async (payload) => {
@@ -66,7 +77,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await getJson("/api/auth/logout", { method: "POST" });
-    } catch (error) {
+    } catch {
       // Ignore logout API errors and clear local session state.
     } finally {
       setUser(null);
@@ -92,6 +103,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

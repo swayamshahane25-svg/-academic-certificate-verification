@@ -1,4 +1,4 @@
-const { PDFParse } = require("pdf-parse");
+const pdfParse = require("pdf-parse");
 
 function normalizeText(value) {
   if (!value) return "";
@@ -76,8 +76,8 @@ async function extractTextFromPdf(buffer) {
     throw new Error("A valid PDF buffer is required.");
   }
 
-  const parser = new PDFParse({ data: buffer });
-  const parsed = await parser.getText();
+  // pdf-parse returns an object with a `text` property when called with a buffer
+  const parsed = await pdfParse(buffer);
 
   if (!parsed || !parsed.text || !normalizeText(parsed.text).trim()) {
     throw new Error("The uploaded PDF could not be parsed for text.");

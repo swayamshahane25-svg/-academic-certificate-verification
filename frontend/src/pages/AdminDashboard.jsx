@@ -2,6 +2,25 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+async function fetchAdminData(token) {
+  const [statsResponse, usersResponse] = await Promise.all([
+    fetch("http://localhost:5050/api/auth/admin/stats", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    fetch("http://localhost:5050/api/auth/admin/users", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  ]);
+
+  if (!statsResponse.ok || !usersResponse.ok) {
+    throw new Error("Failed to load admin dashboard.");
+  }
+
+  const statsData = await statsResponse.json();
+  const usersData = await usersResponse.json();
+  return { statsData, users: usersData.users || [] };
+}
+
 function AdminDashboard() {
   const navigate = useNavigate();
   const { user, token, logout } = useAuth();
@@ -14,23 +33,9 @@ function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsResponse, usersResponse] = await Promise.all([
-        fetch("http://localhost:5050/api/auth/admin/stats", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("http://localhost:5050/api/auth/admin/users", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (!statsResponse.ok || !usersResponse.ok) {
-        throw new Error("Failed to load admin dashboard.");
-      }
-
-      const statsData = await statsResponse.json();
-      const usersData = await usersResponse.json();
+      const { statsData, users } = await fetchAdminData(token);
       setStats(statsData);
-      setUsers(usersData.users || []);
+      setUsers(users);
     } catch (error) {
       console.error(error);
     } finally {
@@ -39,8 +44,26 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (!token) navigate("/login");
-    else loadData();
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const initializeDashboard = async () => {
+      setLoading(true);
+
+      try {
+        const { statsData, users } = await fetchAdminData(token);
+        setStats(statsData);
+        setUsers(users);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void initializeDashboard();
   }, [token, navigate]);
 
   const handleLogout = () => {

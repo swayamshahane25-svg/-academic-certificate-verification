@@ -2,6 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+async function fetchDashboardData(token) {
+  const [statsResponse, certificatesResponse] = await Promise.all([
+    fetch("http://localhost:5050/api/dashboard/stats", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    fetch("http://localhost:5050/api/certificates", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  ]);
+
+  if (!statsResponse.ok || !certificatesResponse.ok) {
+    throw new Error("Failed to load dashboard data");
+  }
+
+  const statsData = await statsResponse.json();
+  const certificatesData = await certificatesResponse.json();
+  return {
+    statsData,
+    certificates: certificatesData.certificates || [],
+  };
+}
+
 const navItems = [
   { label: "Dashboard", to: "/dashboard", active: true },
   { label: "Issue Certificate", to: "/issue" },
@@ -33,24 +55,10 @@ function Dashboard() {
       setLoading(true);
       setError("");
 
-      const [statsResponse, certificatesResponse] = await Promise.all([
-        fetch("http://localhost:5050/api/dashboard/stats", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("http://localhost:5050/api/certificates", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (!statsResponse.ok || !certificatesResponse.ok) {
-        throw new Error("Failed to load dashboard data");
-      }
-
-      const statsData = await statsResponse.json();
-      const certificatesData = await certificatesResponse.json();
+      const { statsData, certificates } = await fetchDashboardData(token);
 
       setStats(statsData);
-      setCertificates(certificatesData.certificates || []);
+      setCertificates(certificates);
     } catch (loadError) {
       console.error(loadError);
       setError("Unable to connect to the CertiChain backend.");
@@ -65,7 +73,24 @@ function Dashboard() {
       return;
     }
 
-    loadDashboard();
+    const initializeDashboard = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const { statsData, certificates } = await fetchDashboardData(token);
+
+        setStats(statsData);
+        setCertificates(certificates);
+      } catch (loadError) {
+        console.error(loadError);
+        setError("Unable to connect to the CertiChain backend.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void initializeDashboard();
   }, [token, navigate]);
 
   const formatDate = (timestamp) => {
